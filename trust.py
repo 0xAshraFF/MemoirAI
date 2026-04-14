@@ -1,15 +1,26 @@
-# trust.py — C2 regional trust: fast penalty, fast reward (0.5/0.5 each).
-# Matches aggressive_regional_trust.py TRUST_PARAMS['C2'] = (0.50, 0.50, 0.50, 0.50).
+# trust.py — Regional trust updates and prediction blending.
+# Includes both the legacy C2 updater and a comparative updater that
+# responds to NN-vs-memory performance instead of smoothing NN accuracy alone.
 
 import numpy as np
 from collections import deque
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 
-# C2: pen_old=0.5, pen_new=0.5, rew_old=0.5, rew_new=0.5
-# Both reward and penalty: tau = 0.5*tau + 0.5*recent_nn_acc
-TRUST_OLD_WEIGHT     = 0.5
-TRUST_NEW_WEIGHT     = 0.5
+# Legacy C2: pen_old=0.5, pen_new=0.5, rew_old=0.5, rew_new=0.5
+LEGACY_TRUST_OLD_WEIGHT = 0.5
+LEGACY_TRUST_NEW_WEIGHT = 0.5
+
+# Comparative trust:
+# - only reduce NN trust when evo beats it by a meaningful margin
+# - otherwise stay close to the stronger legacy C2 behavior
+COMPARE_MARGIN            = 0.05
+COMPARE_PENALTY_STRENGTH  = 0.60
+COMPARE_DECAY_OLD_WEIGHT  = 0.55
+COMPARE_DECAY_NEW_WEIGHT  = 0.45
+COMPARE_RISE_OLD_WEIGHT   = 0.60
+COMPARE_RISE_NEW_WEIGHT   = 0.40
+
 TRUST_INITIAL_KNOWN  = 0.5
 TRUST_INITIAL_NEW    = 0.0
 ROLLING_WINDOW       = 3
@@ -34,28 +45,41 @@ def add_new_class(trust: dict, class_id: int) -> None:
 
 # ─── Trust update (C2 regional) ───────────────────────────────────────────────
 
+def _relative_nn_target(recent_nn: float, recent_evo: float) -> float:
+    """
+    Convert recent regional performance into a trust target for the frozen NN.
+
+    The baseline target is recent NN accuracy. If evo only barely wins, we do
+    not overreact. If evo wins by more than COMPARE_MARGIN, reduce the target
+    in proportion to that gap. This keeps the blend stable while still letting
+    new or drifting regions move toward the adaptive memory.
+    """
+    gap = max(0.0, recent_evo - recent_nn - COMPARE_MARGIN)
+    target = recent_nn * (1.0 - COMPARE_PENALTY_STRENGTH * gap)
+    return float(np.clip(target, 0.0, 1.0))
+
+
 def update_trust(
     trust: dict,
     history: dict,
     nl: np.ndarray,
     nn_correct: np.ndarray,
     evo_correct: np.ndarray,
+    mode: str = "comparative",
 ) -> dict:
     """
-    C2 symmetric regional trust update:
+    Regional trust update.
 
-      For each class region (identified by nearest-basin label):
-        nn_acc  = mean(nn_correct  where nl == cls)
-        evo_acc = mean(evo_correct where nl == cls)
-        append (nn_acc, evo_acc) to rolling history
+    Modes
+    -----
+    legacy:
+        Original C2 updater from aggressive_regional_trust.py.
+        Trust is just an EMA of recent NN regional accuracy.
 
-        recent_nn  = rolling mean of nn_acc over last ROLLING_WINDOW weeks
-        recent_evo = rolling mean of evo_acc over last ROLLING_WINDOW weeks
-
-        if recent_nn >= recent_evo:   # reward
-            tau = 0.5 * tau + 0.5 * recent_nn
-        else:                          # penalty (same formula for C2)
-            tau = 0.5 * tau + 0.5 * recent_nn
+    comparative:
+        Trust starts from recent NN regional accuracy and only drops when evo
+        beats the NN by more than a small margin. The update is smoothed
+        asymmetrically so shifts away from stale NN behavior remain controlled.
 
     Mutates history in-place; returns a new trust dict.
 
@@ -80,8 +104,23 @@ def update_trust(
         recent_evo = float(np.mean([h[1] for h in history[cls]]))
 
         t = trust[cls]
-        # C2: same formula for reward and penalty
-        new_val = TRUST_OLD_WEIGHT * t + TRUST_NEW_WEIGHT * recent_nn
+        if mode == "legacy":
+            new_val = (
+                LEGACY_TRUST_OLD_WEIGHT * t
+                + LEGACY_TRUST_NEW_WEIGHT * recent_nn
+            )
+        elif mode == "comparative":
+            target = _relative_nn_target(recent_nn, recent_evo)
+            if target < t:
+                old_w = COMPARE_DECAY_OLD_WEIGHT
+                new_w = COMPARE_DECAY_NEW_WEIGHT
+            else:
+                old_w = COMPARE_RISE_OLD_WEIGHT
+                new_w = COMPARE_RISE_NEW_WEIGHT
+            new_val = old_w * t + new_w * target
+        else:
+            raise ValueError(f"Unknown trust mode: {mode}")
+
         new_trust[cls] = float(np.clip(new_val, 0.0, 1.0))
 
     return new_trust

@@ -9,7 +9,7 @@ Synthetic-data-based. Designed for thesis reviewer walkthroughs.
 |---|---|
 | Frozen NN | Nearest-centroid classifier (T=0.8), 5 fixed output classes |
 | Evolutionary memory | 30 Gaussian-activation basins, evolved offline |
-| Trust mechanism | Symmetric EMA (λ=0.5) per-class trust, 3-week rolling window |
+| Trust mechanism | Legacy C2 trust plus a comparative regional trust mode |
 | Hybrid prediction | `p = τ²·p_nn + (1−τ²)·p_evo` — normalised per class |
 
 Three scenarios demonstrate the mechanism under domain shift:
@@ -51,6 +51,31 @@ Expected output (seed 42, C2 variant):
 
 All results within ±3 pp of these targets (see paper Table 1).
 
+## Compare baseline vs improved version
+
+```bash
+python compare_versions.py
+```
+
+This runs a 5-seed comparison across three variants:
+
+- `legacy_paper` — original optimistic paper-style benchmark
+- `online_c2` — fairer online split using the original C2 trust
+- `online_compare` — fairer online split with comparative trust and 3-week replay evolution
+
+Current 5-seed summary:
+
+| Scenario | `online_c2` hybrid | `online_compare` hybrid | Change |
+|---|---:|---:|---:|
+| Class Emergence | 86.6% ± 2.4 | 86.6% ± 0.6 | +0.1 pp |
+| Class Imbalance | 99.6% ± 0.1 | 99.6% ± 0.1 | -0.1 pp |
+| Distributional Drift | 96.4% ± 0.5 | 96.6% ± 0.4 | +0.1 pp |
+| Overall mean | 94.2% | 94.3% | +0.1 pp |
+
+Additional stability gain:
+
+- Drift evo memory improved from `80.0% ± 17.2` to `87.5% ± 8.8` under the fair online benchmark.
+
 ## Walkthrough (≈2 minutes)
 
 1. Select **Class Emergence** in the sidebar.
@@ -75,6 +100,7 @@ audit.py        Audit-record builder
 charts.py       Plotly figure builders
 scenarios.py    Scenario definitions
 verify.py       Headless accuracy verification script
+compare_versions.py  Multi-seed baseline vs improved comparison
 requirements.txt
 ```
 
@@ -102,4 +128,5 @@ requirements.txt
 - All results are on synthetic Gaussian clusters. Real-data validation is future work.
 - Trust region assignment uses class label; more formal analysis is listed as future work in the paper.
 - Evolution runs in pure Python (O(n) basin scan); KD-tree indexing would reduce latency.
-- Multi-seed evaluation has not been performed; seed 42 is the single documented run.
+- The original paper-aligned verification is still single-seed and optimistic by design.
+- The new multi-seed benchmark is fairer, but still uses synthetic data rather than real deployment traces.

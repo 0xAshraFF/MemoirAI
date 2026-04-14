@@ -48,6 +48,7 @@ def _init_state(scenario_key: str = "emergence") -> None:
         trust=initialize_trust(N_BASE_CLASSES),
         trust_history=make_history(N_BASE_CLASSES),
         feedback_buffer=[],     # (x, y) pairs from most recent Feed Sample
+        feedback_replay=[],     # rolling list of recent feedback buffers
         history=[],
         audit=None,
         shift_activated=False,
@@ -85,8 +86,10 @@ def _feed_week() -> None:
         n_classes=n_classes,
     )
 
-    # Store this week's feedback for evolution
+    # Store this week's feedback for evolution and short replay
     ss.feedback_buffer = list(zip(x_fb, y_fb.tolist())) if len(x_fb) else []
+    if ss.feedback_buffer:
+        ss.feedback_replay = (ss.feedback_replay + [ss.feedback_buffer])[-3:]
 
     # ── Evaluate eval subset (batch) ─────────────────────────────────────────
 
@@ -131,10 +134,15 @@ def _feed_week() -> None:
         week=week,
     )
 
-    # ── Trust update (C2 regional) ────────────────────────────────────────────
+    # ── Trust update (comparative regional) ───────────────────────────────────
 
     ss.trust = update_trust(
-        ss.trust, ss.trust_history, nl_batch, nn_correct_arr, evo_correct_arr
+        ss.trust,
+        ss.trust_history,
+        nl_batch,
+        nn_correct_arr,
+        evo_correct_arr,
+        mode="comparative",
     )
 
     # ── Week-level accuracy summary ───────────────────────────────────────────
@@ -178,11 +186,14 @@ def _activate_shift() -> None:
 
 
 def _simulate_evolution() -> None:
-    """Run one offline evolutionary update on this week's feedback samples."""
+    """Run one offline evolutionary update on a short replay of feedback samples."""
     ss = st.session_state
     if not ss.feedback_buffer:
         return
-    ss.basins = evolve_basins(ss.basins, ss.feedback_buffer, ss.rng)
+    replay_feedback = []
+    for chunk in ss.feedback_replay:
+        replay_feedback.extend(chunk)
+    ss.basins = evolve_basins(ss.basins, replay_feedback, ss.rng)
     ss.evo_ran = True
 
 
