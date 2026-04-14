@@ -157,7 +157,14 @@ def run_scenario(scenario_key: str) -> dict:
         # Trust update — C2 regional
         nn_correct  = nn_preds  == y
         evo_correct = evo_preds == y
-        regional = update_trust(regional, history, nl, nn_correct, evo_correct)
+        regional = update_trust(
+            regional,
+            history,
+            nl,
+            nn_correct,
+            evo_correct,
+            mode="legacy",
+        )
 
     n = totals["n"]
     return {k: totals[k] / n for k in ["nn", "evo", "hybrid"]}
