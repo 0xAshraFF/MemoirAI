@@ -130,3 +130,41 @@ requirements.txt
 - Evolution runs in pure Python (O(n) basin scan); KD-tree indexing would reduce latency.
 - The original paper-aligned verification is still single-seed and optimistic by design.
 - The new multi-seed benchmark is fairer, but still uses synthetic data rather than real deployment traces.
+
+## Real-data benchmark harness
+
+The repository now includes a separate `real_eval/` package for first-pass
+LongBench-style testing on a real language-model path.
+
+What it adds:
+
+- focused LongBench subset loader for QA, summarization, and code tasks
+- conservative MemoirAI prompt-side prefill compression proxy
+- optional TurboQuant backend detection hook
+- pluggable model adapters (`dummy` for smoke tests, `transformers` for real runs)
+- JSON report generation with score, latency, compression, and KV-cache proxies
+
+Quick smoke test:
+
+```bash
+python -m real_eval.runner --backend dummy --dataset-source local
+```
+
+Transformers-backed run after installing dependencies:
+
+```bash
+python -m real_eval.runner \
+  --backend transformers \
+  --dataset-source hf \
+  --dataset-name THUDM/LongBench \
+  --model-name Qwen/Qwen2.5-0.5B-Instruct \
+  --max-examples-per-task 5
+```
+
+Notes:
+
+- The current MemoirAI real-data path is a conservative prompt-compression proxy.
+  It does not yet patch the model's internal KV cache.
+- If a TurboQuant backend is installed, the harness will surface capability
+  flags and pass backend kwargs through the adapter. Otherwise it still reports
+  stacked-mode KV-memory proxies so the evaluation pipeline remains runnable.

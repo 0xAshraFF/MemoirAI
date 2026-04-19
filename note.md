@@ -254,3 +254,28 @@ From this point on, `note.md` should be updated whenever one of these happens:
 - deployment decisions
 
 That will keep the file useful as both a research journal and a build log.
+
+## Real-Data Harness Added
+
+The repo now has a separate real-eval path under `real_eval/`.
+
+Why this was needed:
+
+- The main app remains a synthetic reviewer demo.
+- We needed a clean path for LongBench-style testing without rewriting the demo.
+- The first target is a smaller local model so the pipeline can be validated end to end.
+
+What was added:
+
+- focused LongBench subset loader
+- lightweight metrics for QA, summarization, and code tasks
+- conservative MemoirAI prompt-compression proxy
+- optional TurboQuant backend detection and memory-proxy stacking
+- model adapter layer with `dummy` and `transformers` backends
+- report writer for side-by-side variant output
+
+Important caveat:
+
+- The new benchmark path is honest about the current state: MemoirAI is still
+  approximated at prompt/prefill level until a real KV-cache integration is
+  wired into the serving runtime.
