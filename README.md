@@ -1,6 +1,6 @@
-# EAM Demo
+# MemoirAI - Evolutionary Attention Memory
 
-Local-first research demo for **Evolutionary Attention Memory (EAM)**.  
+Local-first research for **Evolutionary Attention Memory (EAM)**.  
 Synthetic-data-based. Designed for thesis reviewer walkthroughs.
 
 ## What it shows
